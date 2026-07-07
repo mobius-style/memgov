@@ -90,6 +90,18 @@ Markdown — conservative, auditable, tunable in `memgov.toml`.
 python3 -m pytest tests/ -q   # 10 tests, stdlib + pytest only
 ```
 
+## Citation
+
+A companion systems paper documents the motivating incident, the RCGov
+theory transplant, and the first measured detection-and-repair cycle:
+
+> Toeda, T. (2026). *Memory Is Not Live State — Cross-Agent Memory
+> Governance by Transplanting the Reflective Context Governor onto Agent
+> Memory (memgov v0.1.0).* MOBIUS LLC. DOI:
+> [10.5281/zenodo.21231158](https://doi.org/10.5281/zenodo.21231158).
+
+See `CITATION.cff` for machine-readable metadata.
+
 ## License
 
 Code: AGPL-3.0-or-later. Documentation under `docs/`: CC BY-NC-SA 4.0

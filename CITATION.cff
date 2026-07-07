@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use memgov, please cite the companion paper (preferred) or this repository."
+title: "memgov — cross-agent memory governance"
+version: 0.1.0
+date-released: 2026-07-07
+authors:
+  - family-names: Toeda
+    given-names: Taiko
+    affiliation: MOBIUS LLC
+    orcid: "https://orcid.org/0009-0001-7267-0201"
+repository-code: "https://github.com/mobius-style/memgov"
+license: AGPL-3.0-or-later
+keywords:
+  - ai-agents
+  - agent-memory
+  - context-governance
+  - drift-detection
+preferred-citation:
+  type: report
+  title: "Memory Is Not Live State — Cross-Agent Memory Governance by Transplanting the Reflective Context Governor onto Agent Memory (memgov v0.1.0)"
+  authors:
+    - family-names: Toeda
+      given-names: Taiko
+      affiliation: MOBIUS LLC
+      orcid: "https://orcid.org/0009-0001-7267-0201"
+  doi: 10.5281/zenodo.21231158
+  year: 2026
