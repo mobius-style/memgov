@@ -1,0 +1,21 @@
+# memgov configuration — cross-agent memory governance.
+# Paths are relative to this file unless absolute; ~ is expanded.
+
+[memgov]
+shared_state = "SHARED_STATE.md"
+out_dir = "memory_governance"
+# inject_shared_state = true    # hook-context injects the table itself
+# max_inject_chars = 8000
+# Extend (not replace) the built-in EN+JA marker lists:
+# extra_stale_markers = ["on hold"]
+# extra_resolved_markers = ["shipped"]
+# extra_resolution_words = ["superseded"]
+
+# Your agents' persistent memory stores (any dirs of *.md files).
+[stores]
+# claude-main = "~/.claude/projects/<your-project-slug>/memory"
+# codex = "~/.codex/memories"
+
+[freshness]
+stale_days = 2      # status-bearing file untouched this long => flag
+suppress_days = 3   # quiet period after `memgov mark-restored <store>`

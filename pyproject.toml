@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memgov"
+version = "0.1.0"
+description = "Cross-agent memory governance: gate what an AI agent's persistent memory may assert before the agent relies on it"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Taiko Toeda", email = "toeda.t@gmail.com" }]
+keywords = ["ai-agents", "memory", "context-governance", "claude-code", "codex"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/mobius-style/memgov"
+
+[project.scripts]
+memgov = "memgov.__main__:main"
+
+[tool.setuptools]
+packages = ["memgov"]
+
+[tool.setuptools.package-data]
+memgov = ["templates/*"]

@@ -1,0 +1,18 @@
+{
+  "//": "Merge into <repo>/.codex/hooks.json. Codex accepts the same hookSpecificOutput JSON as Claude Code, so `memgov hook-context` serves both agents unchanged. Codex re-confirms trust when hooks.json changes.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 -m memgov hook-context 2>/dev/null || true",
+            "statusMessage": "memgov: checking memory freshness",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

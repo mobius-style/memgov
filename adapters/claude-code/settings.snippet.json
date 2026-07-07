@@ -1,0 +1,17 @@
+{
+  "//": "Merge into ~/.claude/settings.json (or .claude/settings.json). Point cd at the directory holding your memgov.toml.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /path/to/your/workspace && python3 -m memgov hook-context 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "memgov: checking memory freshness"
+          }
+        ]
+      }
+    ]
+  }
+}
