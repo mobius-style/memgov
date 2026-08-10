@@ -1,7 +1,7 @@
 # memgov — cross-agent memory governance
 
-Gate what an AI agent's **persistent memory** may assert before the agent
-relies on it. Local-first, deterministic, stdlib-only (Python 3.11+).
+Surface what an AI agent's **persistent memory** may be asserting stale, before
+the agent relies on it. Local-first, deterministic, stdlib-only (Python 3.11+).
 
 > Memory is a point-in-time snapshot, not live state.
 
@@ -10,7 +10,7 @@ axiom — `InjectContext_t ⇒ ContextReady_t`, *govern what a model reads
 before it answers* — onto the memory layer of coding agents (Claude Code,
 GPT Codex, and anything else whose memory is Markdown on disk).
 
-## The failure it prevents
+## The failure it is built to catch
 
 Two agents share a workspace. Agent A's memory says a paper is
 "not yet deposited". In reality it was published yesterday — by a session
@@ -83,6 +83,17 @@ Report; the review-queue rule ≈ non-compensatory gating.
 No embeddings, no LLM calls, no background daemon, no writes to your memory
 stores (except the opt-in `.last_restored` marker). Detection is regex over
 Markdown — conservative, auditable, tunable in `memgov.toml`.
+
+**Not a gate.** Nothing is blocked and nothing is deleted: `memgov` produces a
+review queue, and a queue an agent ignores prevents nothing. What it bounds is
+*visibility* — a stale claim that matches a resolved row gets surfaced before
+it is relied on, deterministically and with an audit trail.
+
+**What it misses**, by construction of regex-over-Markdown detection: a stale
+claim written without a status marker; a claim whose wording does not match the
+SHARED_STATE key regex for the row that resolved it; anything stale in a store
+that is not `*.md`; and drift in a fact that never got a SHARED_STATE row in the
+first place. A clean scan means "no rule fired", not "your memory is current".
 
 ## Development
 
