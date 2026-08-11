@@ -113,6 +113,13 @@ theory transplant, and the first measured detection-and-repair cycle:
 
 See `CITATION.cff` for machine-readable metadata.
 
+## Practical kits
+
+The operational discipline behind this project — abstain gates, kill switches,
+regression evals, rollback — is available as a practical audit kit for small
+teams: [free 25-point checklist](https://toeda.gumroad.com/l/free-checklist) ·
+[full kit + monthly safety briefing](https://toeda.gumroad.com/l/safety-briefing).
+
 ## License
 
 Code: AGPL-3.0-or-later. Documentation under `docs/`: CC BY-NC-SA 4.0
