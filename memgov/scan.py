@@ -10,6 +10,7 @@ auto-deleted; only verification against the row's anchor clears it.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -21,7 +22,20 @@ _CELL_SPLIT = re.compile(r"(?<!\\)\|")  # respect escaped pipes in keys
 
 
 def _alternation(words: list[str]) -> re.Pattern:
-    return re.compile("|".join(re.escape(w) for w in words), re.IGNORECASE)
+    """Compile a marker list. All-uppercase alphabetic markers (HOLD, TBD…) are
+    status codes, not words: matched case-sensitively and on word boundaries,
+    or 'HOLD' fires inside 'holds', 'threshold' and 'placeholder' on every
+    English-language store (found by calibration against a live workspace).
+    Everything else keeps the original case-insensitive substring behaviour,
+    which is what non-segmented scripts like Japanese need."""
+    parts = []
+    for w in words:
+        esc = re.escape(w)
+        if w.isascii() and w.isalpha() and w.isupper():
+            parts.append(rf"\b{esc}\b")
+        else:
+            parts.append(rf"(?i:{esc})")
+    return re.compile("|".join(parts))
 
 
 def parse_shared_state(cfg: Config) -> tuple[list[dict], list[str]]:
@@ -55,10 +69,48 @@ def parse_shared_state(cfg: Config) -> tuple[list[dict], list[str]]:
     return rows, warnings
 
 
+# Adjudicated false positives. Every row MUST carry an adjudication date and a
+# rationale — the point of the allowlist is to preserve *why* something was
+# silenced, not merely to silence it. A suppression whose reason is lost is
+# worse than a false positive, because nobody can audit it later; rows missing
+# a required field are ignored and warned about, never honoured.
+ADJUDICATION_REQUIRED = ("store", "text_sha256", "entity", "adjudicated", "rationale")
+
+
+def line_key(store: str, entity: str, text: str) -> str:
+    """Stable anchor for one finding: store + entity + whitespace-normalized
+    line, hashed. Anchoring on content rather than a line number means editing
+    the adjudicated line expires its adjudication automatically."""
+    norm = " ".join(text.split())
+    return hashlib.sha256(f"{store}|{entity}|{norm}".encode()).hexdigest()
+
+
+def load_adjudications(cfg: Config, warnings: list[str]) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    path = cfg.adjudications_path
+    if not path.is_file():
+        return out
+    for n, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError:
+            warnings.append(f"{path.name}:{n} ignored — not JSON")
+            continue
+        missing = [k for k in ADJUDICATION_REQUIRED if not row.get(k)]
+        if missing:
+            warnings.append(f"{path.name}:{n} ignored — missing {missing}")
+            continue
+        out[row["text_sha256"]] = row
+    return out
+
+
 def scan(cfg: Config) -> dict:
     rows, warnings = parse_shared_state(cfg)
     stale_re = _alternation(cfg.stale_markers)
     resolution_re = _alternation(cfg.resolution_words)
+    adjudicated = load_adjudications(cfg, warnings)
     findings: list[dict] = []
     files_scanned = 0
     for store, root in sorted(cfg.stores.items()):
@@ -78,20 +130,38 @@ def scan(cfg: Config) -> dict:
                     continue
                 for row in rows:
                     if row["key_re"].search(line):
+                        key = line_key(store, row["entity"], line)
+                        adj = adjudicated.get(key)
+                        if adj:
+                            klass = "adjudicated"
+                        elif cfg.kind_of(store) == "log":
+                            klass = "historical"
+                        else:
+                            klass = "drift"
                         findings.append({
                             "store": store, "file": f.name, "line": i,
                             "entity": row["entity"],
                             "shared_state": row["state"],
                             "verify": row["verify"],
                             "text": line.strip()[:200],
+                            "class": klass, "key": key,
+                            "adjudication": ({"adjudicated": adj["adjudicated"],
+                                              "rationale": adj["rationale"]}
+                                             if adj else None),
                         })
                         break
+    drift = [f for f in findings if f["class"] == "drift"]
     return {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "files_scanned": files_scanned,
         "rows_watched": len(rows),
         "warnings": warnings,
-        "findings": findings,
+        "findings": drift,
+        "all_findings": findings,
+        "suppressed": {
+            "historical": sum(1 for f in findings if f["class"] == "historical"),
+            "adjudicated": sum(1 for f in findings if f["class"] == "adjudicated"),
+        },
     }
 
 
@@ -120,12 +190,36 @@ def write_outputs(cfg: Config, result: dict) -> None:
         ]
     if not result["findings"]:
         lines.append("No suspected drift. (A clean pass is also evidence.)")
+
+    others = [f for f in result.get("all_findings", []) if f["class"] != "drift"]
+    if others:
+        sup = result.get("suppressed", {})
+        lines += [
+            "", "---", "",
+            "## Suppressed (not drift)",
+            "",
+            f"`historical` {sup.get('historical', 0)} · "
+            f"`adjudicated` {sup.get('adjudicated', 0)}. Listed in full so the",
+            "suppression stays auditable — a silenced finding whose reason is",
+            "lost is worse than a false positive.",
+            "",
+        ]
+        for fd in others:
+            lines.append(f"- **{fd['class']}** `{fd['store']}` "
+                         f"`{fd['file']}:{fd['line']}` ({fd['entity']})")
+            if fd.get("adjudication"):
+                a = fd["adjudication"]
+                lines.append(f"  - adjudicated {a['adjudicated']}: {a['rationale']}")
+            else:
+                lines.append("  - append-only log store; a stale statement there "
+                             "is correct as history (kind = log)")
     if result["warnings"]:
         lines += ["", "## Warnings", ""]
         lines += [f"- {w}" for w in result["warnings"]]
     cfg.conflict_map_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    entry = {k: v for k, v in result.items() if k != "findings"}
+    entry = {k: v for k, v in result.items()
+             if k not in ("findings", "all_findings")}
     entry["findings"] = len(result["findings"])
     with open(cfg.ledger_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")

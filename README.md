@@ -95,6 +95,35 @@ SHARED_STATE key regex for the row that resolved it; anything stale in a store
 that is not `*.md`; and drift in a fact that never got a SHARED_STATE row in the
 first place. A clean scan means "no rule fired", not "your memory is current".
 
+## Keeping the queue readable: store kinds and adjudications
+
+The first live deployment taught us the failure mode of the scan itself: it
+reported the **same 16 findings on every run**, and the noise buried anything
+real. Eleven came from an append-only session log — a store that is *supposed*
+to contain statements that were true when written and are false now, so
+comparing it against live state is a category error, not a detection. Five were
+keyword coincidences. v0.2.0 adds the two mechanisms that took that deployment
+from 16 permanent findings to zero, without silencing anything silently:
+
+**Store kinds.** Declare a store a `log` and its findings are reported under
+HISTORICAL instead of counting as drift:
+
+```toml
+[stores]
+claude-main = "~/.claude/projects/<slug>/memory"        # index (default)
+codex = { path = "~/.codex/memories", kind = "log" }    # append-only history
+```
+
+**Adjudications.** A finding you have investigated and judged a false positive
+goes into `memory_governance/ADJUDICATIONS.jsonl`, one JSON object per line,
+with `store`, `text_sha256` (the `key` printed in the finding), `entity`,
+`adjudicated` (date) and `rationale` **all required** — a row missing any of
+them is ignored and warned about, because a suppression whose reason is lost is
+worse than a false positive. The anchor is a hash of the normalized line, so
+editing the line expires its adjudication automatically. Suppressed findings
+are still listed in the CONFLICT_MAP, each with its recorded reason: the
+suppression itself stays auditable.
+
 ## Development
 
 ```bash

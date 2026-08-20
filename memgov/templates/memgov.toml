@@ -12,9 +12,15 @@ out_dir = "memory_governance"
 # extra_resolution_words = ["superseded"]
 
 # Your agents' persistent memory stores (any dirs of *.md files).
+#
+# A bare path is an *index* store: it claims to describe current state, so a
+# stale line matching a resolved row is drift. A store that is really an
+# append-only session log should say so — logs are SUPPOSED to contain
+# statements that were true then and are false now, and comparing them against
+# live state produces permanent false positives, not detections:
 [stores]
 # claude-main = "~/.claude/projects/<your-project-slug>/memory"
-# codex = "~/.codex/memories"
+# codex = { path = "~/.codex/memories", kind = "log" }
 
 [freshness]
 stale_days = 2      # status-bearing file untouched this long => flag

@@ -135,3 +135,104 @@ def test_cli_init_scaffolds(tmp_path, monkeypatch, capsys):
     assert cli_main(["init"]) == 0
     assert (tmp_path / "SHARED_STATE.md").read_text(
         encoding="utf-8") == "edited"
+
+
+# ── store kinds and adjudications (v0.2.0) ──────────────────────────────────
+#
+# Both features exist because of one measured failure: the first live
+# deployment reported the same 16 findings on every run — 11 from an
+# append-only session log being compared against live state (a category
+# error), 5 from keyword coincidences — and the noise buried real drift.
+
+
+def test_log_store_findings_are_historical_not_drift(ws, tmp_path):
+    log = tmp_path / "session_log"
+    log.mkdir()
+    (log / "raw.md").write_text(
+        "At the time, Paper X was pending owner review.\n", encoding="utf-8")
+    ws.stores["log"] = log
+    ws.store_kinds["log"] = "log"
+    result = scan_mod.scan(ws)
+    assert result["findings"] == []          # not drift...
+    assert result["suppressed"]["historical"] == 1
+    assert result["all_findings"][0]["class"] == "historical"  # ...but reported
+
+
+def test_index_store_is_still_drift_by_default(ws):
+    _write(ws, "m.md", "Paper X is still pending owner review.\n")
+    result = scan_mod.scan(ws)
+    assert len(result["findings"]) == 1
+    assert result["findings"][0]["class"] == "drift"
+
+
+def test_adjudication_suppresses_and_is_reported(ws):
+    _write(ws, "m.md", "Paper X is still pending owner review.\n")
+    first = scan_mod.scan(ws)["findings"][0]
+    ws.out_dir.mkdir(parents=True, exist_ok=True)
+    ws.adjudications_path.write_text(json.dumps({
+        "store": "a", "text_sha256": first["key"], "entity": first["entity"],
+        "adjudicated": "2026-08-21", "rationale": "keyword coincidence",
+    }) + "\n", encoding="utf-8")
+    result = scan_mod.scan(ws)
+    assert result["findings"] == []
+    assert result["suppressed"]["adjudicated"] == 1
+    scan_mod.write_outputs(ws, result)
+    report = ws.conflict_map_path.read_text(encoding="utf-8")
+    assert "keyword coincidence" in report   # the WHY survives into the report
+
+
+def test_adjudication_missing_rationale_is_ignored_and_warned(ws):
+    _write(ws, "m.md", "Paper X is still pending owner review.\n")
+    first = scan_mod.scan(ws)["findings"][0]
+    ws.out_dir.mkdir(parents=True, exist_ok=True)
+    row = {"store": "a", "text_sha256": first["key"], "entity": first["entity"],
+           "adjudicated": "2026-08-21"}     # no rationale
+    ws.adjudications_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    result = scan_mod.scan(ws)
+    assert len(result["findings"]) == 1      # NOT honoured
+    assert any("rationale" in w for w in result["warnings"])
+
+
+def test_editing_the_line_expires_its_adjudication(ws):
+    f = _write(ws, "m.md", "Paper X is still pending owner review.\n")
+    first = scan_mod.scan(ws)["findings"][0]
+    ws.out_dir.mkdir(parents=True, exist_ok=True)
+    ws.adjudications_path.write_text(json.dumps({
+        "store": "a", "text_sha256": first["key"], "entity": first["entity"],
+        "adjudicated": "2026-08-21", "rationale": "was a coincidence",
+    }) + "\n", encoding="utf-8")
+    assert scan_mod.scan(ws)["findings"] == []
+    f.write_text("Paper X is still pending owner review, really.\n",
+                 encoding="utf-8")           # content changed => new hash
+    assert len(scan_mod.scan(ws)["findings"]) == 1
+
+
+def test_store_kind_from_toml_table(tmp_path):
+    (tmp_path / "SHARED_STATE.md").write_text(SHARED, encoding="utf-8")
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "memgov.toml").write_text(
+        '[memgov]\nshared_state = "SHARED_STATE.md"\n'
+        '[stores]\nplain = "logs"\n'
+        'tagged = { path = "logs", kind = "log" }\n', encoding="utf-8")
+    cfg = config_mod.load(tmp_path / "memgov.toml")
+    assert cfg.kind_of("plain") == "index"   # bare string keeps old behaviour
+    assert cfg.kind_of("tagged") == "log"
+
+
+def test_store_kind_rejects_unknown_value(tmp_path):
+    (tmp_path / "memgov.toml").write_text(
+        '[stores]\nx = { path = "logs", kind = "archive" }\n', encoding="utf-8")
+    with pytest.raises(ValueError):
+        config_mod.load(tmp_path / "memgov.toml")
+
+
+def test_uppercase_status_markers_do_not_match_inside_words(ws):
+    # 'HOLD' fired inside the verb 'holds' on a live store; status codes must
+    # match as words, case-sensitively.
+    _write(ws, "m.md", "Each Paper X source document holds a companion essay.\n")
+    assert scan_mod.scan(ws)["findings"] == []
+
+
+def test_uppercase_status_markers_still_fire_as_words(ws):
+    _write(ws, "m.md", "Paper X status: HOLD until owner review.\n")
+    assert len(scan_mod.scan(ws)["findings"]) == 1
